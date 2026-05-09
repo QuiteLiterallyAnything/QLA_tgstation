@@ -219,10 +219,15 @@ Simple datum which is instanced once per type and is used for every object of sa
 
 /datum/material/proc/on_throw_impact(obj/item/source, atom/hit_atom, datum/thrownthing/throwing_datum, caught)
 	SIGNAL_HANDLER
+
+	var/mob/living/material_thrower = null
+	if (throwing_datum.thrower)
+		material_thrower = astype(throwing_datum.thrower.resolve(), /mob/living)
+
 	if (caught)
-		impact_affect_touch(source, hit_atom, astype(throwing_datum.thrower.resolve(), /mob/living))
+		impact_affect_touch(source, hit_atom, material_thrower)
 	else if (!isliving(hit_atom)) // Hit mobs have armor checking
-		impact_affect_throw_impact(source, hit_atom, astype(throwing_datum.thrower.resolve(), /mob/living))
+		impact_affect_throw_impact(source, hit_atom, material_thrower)
 
 /datum/material/proc/on_throw_impact_living(obj/item/source, mob/living/target, def_zone, blocked, datum/thrownthing/throwing_datum)
 	SIGNAL_HANDLER
