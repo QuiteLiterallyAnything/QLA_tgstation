@@ -238,7 +238,11 @@ Simple datum which is instanced once per type and is used for every object of sa
 		if (!skin_contact)
 			break
 
-	impact_affect_throw_impact(source, target, astype(throwing_datum.thrower.resolve(), /mob/living), def_zone, !!skin_contact)
+	var/material_thrower = null
+	if (throwing_datum.thrower)
+		material_thrower = astype(throwing_datum.thrower.resolve(), /mob/living)
+
+	impact_affect_throw_impact(source, target, material_thrower, def_zone, !!skin_contact)
 
 /datum/material/proc/impact_affect_touch(obj/item/source, mob/living/user, mob/living/initiator)
 	var/arm_dir = IS_LEFT_INDEX(user.active_hand_index) ? BODY_ZONE_L_ARM : BODY_ZONE_R_ARM
