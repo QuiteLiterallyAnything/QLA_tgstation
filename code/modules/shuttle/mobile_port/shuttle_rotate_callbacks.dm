@@ -28,27 +28,31 @@ If ever any of these procs are useful for non-shuttles, rename it to proc/rotate
 /************************************Base /atom/movable proc************************************/
 
 /atom/movable/shuttleRotate(rotation, params)
-	. = ..()
 	//rotate the physical bounds and offsets for multitile atoms too. Override base "rotate the pixel offsets" for multitile atoms.
 	//Override non zero bound_x, bound_y, pixel_x, pixel_y to zero.
 	//Dont take in account starting bound_x, bound_y, pixel_x, pixel_y.
 	//So it can unintentionally shift physical bounds of things that starts with non zero bound_x, bound_y.
-	if(((bound_height != ICON_SIZE_Y) || (bound_width != ICON_SIZE_X)) && (bound_x == 0) && (bound_y == 0)) //Dont shift things that have non zero bound_x and bound_y, or it move somewhere. Now it BSA and Gateway.
-		switch(dir)
-			if(SOUTH)
-				pixel_x = 0
+	if(((bound_height != ICON_SIZE_Y) || (bound_width != ICON_SIZE_X)) && (src::bound_x == 0) && (src::bound_y == 0)) //Dont shift things that have non zero bound_x and bound_y, or it move somewhere. Now it BSA and Gateway.
+		if(params & ROTATE_DIR)
+			//rotate our direction
+			setDir(angle2dir(rotation+dir2angle(dir)))
+		if(rotation < 0)
+			rotation += 360
+		// This only works for icons actually "anchored" at their bottom left corner.
+		// A more complex solution is (probably) necessary to account for the three other possibilities.
+		for(var/turntimes=rotation/90;turntimes>0;turntimes--)
+			if(pixel_y == 0)
+				pixel_y -= bound_height - ICON_SIZE_Y
+				continue
+			else
 				pixel_y = 0
-			if(WEST)
+			if(pixel_x == 0)
+				pixel_x -= bound_width - ICON_SIZE_X
+				continue
+			else
 				pixel_x = 0
-				pixel_y = -bound_height+world.icon_size
-			if(NORTH)
-				pixel_x = -bound_width+world.icon_size
-				pixel_y = -bound_height+world.icon_size
-			if(EAST)
-				pixel_x = -bound_width+world.icon_size
-				pixel_y = 0
-		bound_x = pixel_x
-		bound_y = pixel_y
+	else:
+		. = ..()
 
 /************************************Turf rotate procs************************************/
 
