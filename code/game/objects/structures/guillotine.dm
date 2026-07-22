@@ -6,13 +6,15 @@
 #define GUILLOTINE_BLADE_MOVING 2
 /// The blade has landed in the stocks
 #define GUILLOTINE_BLADE_DROPPED 3
+/// The blade is released but not falling for lack of gravity. It checks for gravity by processing
+/// on SSobj. If set to a different state then the guillotine MUST stop processing.
+#define GUILLOTINE_BLADE_SUSPENDED 4
 /// The blade is being sharpened
-#define GUILLOTINE_BLADE_SHARPENING 4
+#define GUILLOTINE_BLADE_SHARPENING 5
 /// The guillotine blade is being interacted with by the executor
-#define GUILLOTINE_ACTION_INUSE 5
+#define GUILLOTINE_ACTION_INUSE 6
 /// The guillotine is being unfastened
-#define GUILLOTINE_ACTION_WRENCH 6
-
+#define GUILLOTINE_ACTION_WRENCH 7
 /// This is maxiumum sharpness and will decapitate without failure
 #define GUILLOTINE_BLADE_MAX_SHARP 10
 /// Minimum amount of sharpness for decapitation. Any less and it will just do severe brute damage
@@ -63,6 +65,11 @@
 	LAZYINITLIST(buckled_mobs)
 	. = ..()
 
+/obj/structure/guillotine/Destroy(force)
+	. = ..()
+	if(blade_status == GUILLOTINE_BLADE_SUSPENDED)
+		STOP_PROCESSING(SSobj, src)
+
 /obj/structure/guillotine/item_interaction(mob/living/user, obj/item/tool, list/modifiers)
 	if(istype(tool, /obj/item/stack/sheet/plasteel))
 		if(blade_sharpness == GUILLOTINE_BLADE_MAX_SHARP)
@@ -82,6 +89,10 @@
 	if(istype(tool, /obj/item/sharpener))
 		add_fingerprint(user)
 		if (blade_status == GUILLOTINE_BLADE_SHARPENING)
+			return ITEM_INTERACT_BLOCKING
+
+		if (blade_status == GUILLOTINE_BLADE_SUSPENDED)
+			to_chat(user, span_warning("Leveraging the loose blade with [tool] in zero gravity proves too difficult."))
 			return ITEM_INTERACT_BLOCKING
 
 		if (blade_status != GUILLOTINE_BLADE_RAISED)
@@ -117,7 +128,7 @@
 		if (blade_sharpness >= GUILLOTINE_DECAP_MIN_SHARP)
 			msg += " looks sharp enough to decapitate without any resistance."
 		else
-			msg += " doesn't look particularly sharp. Perhaps a whetstone can be used to sharpen it."
+			msg += " doesn't look particularly sharp. Perhaps a whetstone or some plasteel could sharpen it."
 	else
 		msg += "The blade is hidden inside the stocks."
 
@@ -150,9 +161,7 @@
 
 					if (do_after(user, GUILLOTINE_ACTIVATE_DELAY, target = src) && blade_status == GUILLOTINE_BLADE_RAISED)
 						current_action = GUILLOTINE_ACTION_IDLE
-						blade_status = GUILLOTINE_BLADE_MOVING
-						icon_state = "guillotine_drop"
-						addtimer(CALLBACK(src, PROC_REF(drop_blade), user), GUILLOTINE_ANIMATION_LENGTH - 2) // Minus two so we play the sound and decap faster
+						drop_animation(user, GUILLOTINE_ANIMATION_LENGTH - 2) // Minus two so we play the sound and decap faster
 					else
 						current_action = GUILLOTINE_ACTION_IDLE
 				else
@@ -163,14 +172,34 @@
 
 					unbuckle_all_mobs()
 			else
-				blade_status = GUILLOTINE_BLADE_MOVING
-				icon_state = "guillotine_drop"
-				addtimer(CALLBACK(src, PROC_REF(drop_blade), user), GUILLOTINE_ANIMATION_LENGTH)
+				drop_animation(user)
+		if (GUILLOTINE_BLADE_SUSPENDED)
+			user.visible_message(span_notice("[user] pushes the lever and secures [src]'s blade."),
+								span_notice("You push the lever and secure [src]'s blade."))
+			blade_status = GUILLOTINE_BLADE_RAISED
+			STOP_PROCESSING(SSobj, src)
 
 /// Sets the guillotine blade in a raised position
 /obj/structure/guillotine/proc/raise_blade()
 	blade_status = GUILLOTINE_BLADE_RAISED
 	icon_state = "guillotine_raised"
+
+/// Checks for gravity, does the guillotine's drop animation if gravity is
+/// present, and calls `drop_blade()` once the animation is done.
+/obj/structure/guillotine/proc/drop_animation(mob/user, animation_length = GUILLOTINE_ANIMATION_LENGTH)
+	if (blade_status == GUILLOTINE_BLADE_SUSPENDED)
+		return
+
+	if (!has_gravity())
+		user.visible_message(span_warning("[user] pulls [src]'s lever but its blade remains suspended."),
+							span_warning("You pull [src]'s lever to no effect!"))
+		START_PROCESSING(SSobj, src) // The blade is loose and has no gravity. Process
+		blade_status = GUILLOTINE_BLADE_SUSPENDED
+		return
+
+	blade_status = GUILLOTINE_BLADE_MOVING
+	icon_state = "guillotine_drop"
+	addtimer(CALLBACK(src, PROC_REF(drop_blade), user), animation_length)
 
 /// Drops the guillotine blade, potentially beheading or harming the buckled mob
 /obj/structure/guillotine/proc/drop_blade(mob/user)
@@ -186,7 +215,7 @@
 		if(head)
 			if (blade_sharpness >= GUILLOTINE_DECAP_MIN_SHARP || head.brute_dam >= 100)
 				head.dismember()
-				log_combat(user, victim, "beheaded", src)
+				log_guillotine(user, victim, "beheaded", fatal = TRUE)
 				victim.regenerate_icons()
 				unbuckle_all_mobs()
 				kill_count += 1
@@ -210,7 +239,7 @@
 					delay_offset++
 			else
 				victim.apply_damage(15 * blade_sharpness, BRUTE, head, attacking_item = src)
-				log_combat(user, victim, "dropped the blade on", src, " non-fatally")
+				log_guillotine(user, victim, "dropped the blade on", " non-fatally")
 				victim.emote("scream")
 
 			if (blade_sharpness > 1)
@@ -218,6 +247,22 @@
 
 	blade_status = GUILLOTINE_BLADE_DROPPED
 	icon_state = "guillotine"
+
+/// Guillotine logging proc that accounts for the possibility of gravity killing someone.
+/obj/structure/guillotine/proc/log_guillotine(atom/user, atom/victim, what_done, addition, fatal = FALSE)
+	if(!user) // If noone dropped
+		what_done = "was the last fingerprint on [src] after the return of gravity " + what_done
+		log_game("[fingerprintslast] [what_done] [victim] [addition]")
+		if(fatal) // Also gets the
+			victim.investigate_log("was decapitated by the return of gravity to a guillotine's loose blade.", INVESTIGATE_DEATHS)
+	else
+		log_combat(user, victim, what_done, src, addition)
+
+/obj/structure/guillotine/process(seconds_per_tick)
+	if(has_gravity())
+		blade_status = GUILLOTINE_BLADE_MOVING
+		drop_animation()
+		STOP_PROCESSING(SSobj, src)
 
 /obj/structure/guillotine/user_buckle_mob(mob/living/M, mob/user, check_loc = TRUE)
 	if (!anchored)
@@ -299,6 +344,7 @@
 #undef GUILLOTINE_BLADE_RAISED
 #undef GUILLOTINE_BLADE_MOVING
 #undef GUILLOTINE_BLADE_DROPPED
+#undef GUILLOTINE_BLADE_SUSPENDED
 #undef GUILLOTINE_BLADE_SHARPENING
 #undef GUILLOTINE_ACTION_INUSE
 #undef GUILLOTINE_ACTION_WRENCH
