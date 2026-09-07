@@ -29,22 +29,21 @@
 	var/y_offset = 0
 	var/w_offset = 0
 	var/z_offset = 0
-	// Bound offsets upon this component's addition
-	var/x_bound_offset = 0
-	var/y_bound_offset = 0
 
-// In general this component should be added with
-// `AddComponent(/datum/component/multi_tile_rotation, pixel_x, pixel_y, pixel_w, pixel_z)`
-/datum/component/multi_tile_rotation/Initialize(default_x_offset, default_y_offset, default_w_offset, default_z_offset)
+/datum/component/multi_tile_rotation/Initialize()
 	if(!isobj(parent))
 		return COMPONENT_INCOMPATIBLE
 
-	if(default_x_offset || default_y_offset || default_w_offset || default_z_offset)
+	var/obj/object_parent = parent
+	if(!is_multi_tile_object(object_parent))
+		return COMPONENT_INCOMPATIBLE
+
+	if(object_parent.pixel_x || object_parent.pixel_y || object_parent.pixel_w || object_parent.pixel_z)
 		rotation_type = MULTI_TILE_ROTATION_CENTRAL
-		x_offset = default_x_offset
-		y_offset = default_y_offset
-		w_offset = default_w_offset
-		z_offset = default_z_offset
+		x_offset = object_parent.pixel_x
+		y_offset = object_parent.pixel_y
+		w_offset = object_parent.pixel_w
+		z_offset = object_parent.pixel_z
 	else
 		rotation_type = MULTI_TILE_ROTATION_NORMAL
 
@@ -69,7 +68,13 @@
 	object_parent.pixel_w = w_offset
 	object_parent.pixel_z = z_offset
 
-	switch(loc_rotation) // `rotation` of 0 or 360 does not occur
+	// Centrally offset multi-tile objects don't require further correction
+	// for reasons which I am not entirely sure of \_( . _ . )_/
+	if(rotation_type == MULTI_TILE_ROTATION_CENTRAL)
+		finalize_rotation(object_parent, rotation)
+		return
+
+	switch(loc_rotation) // Shuttle rotations of 0 or 360 do not occur
 		if(LOC_BOTTOMLEFT)
 			switch(rotation) // Nonexistant `rotation` of 0 requires no correction
 				if(90)
@@ -100,10 +105,12 @@
 					move_parent_left(object_parent)
 					move_parent_down(object_parent)
 
+	finalize_rotation(object_parent, rotation)
+
+/// Updates our parent's bounds and keeps up with the true loc's rotation.
+/datum/component/multi_tile_rotation/proc/finalize_rotation(obj/object_parent, rotation)
 	object_parent.bound_y = object_parent.pixel_y
 	object_parent.bound_x = object_parent.pixel_x
-	// DEBUG ONLY. SHOULD UNDER NO CIRCUMSTANCES BE INCLUDED IN FINAL, POST-DRAFT PR
-	send_to_playing_players("[object_parent.name] rotated with `loc_rotation` of [loc_rotation] and rotation of [rotation]")
 	loc_rotation += rotation
 	loc_rotation %= 360
 

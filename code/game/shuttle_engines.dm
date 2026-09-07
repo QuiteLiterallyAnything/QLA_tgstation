@@ -211,7 +211,7 @@
 
 /obj/machinery/power/shuttle_engine/large/Initialize(mapload)
 	. = ..()
-	AddComponent(/datum/component/multi_tile_rotation, pixel_x, pixel_y, pixel_w, pixel_z)
+	AddComponent(/datum/component/multi_tile_rotation)
 
 /obj/machinery/power/shuttle_engine/huge
 	name = "engine"
@@ -226,7 +226,7 @@
 
 /obj/machinery/power/shuttle_engine/huge/Initialize(mapload)
 	. = ..()
-	AddComponent(/datum/component/multi_tile_rotation, pixel_x, pixel_y, pixel_w, pixel_z)
+	AddComponent(/datum/component/multi_tile_rotation)
 
 #undef ENGINE_UNWRENCHED
 #undef ENGINE_WRENCHED
